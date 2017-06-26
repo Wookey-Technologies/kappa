@@ -51,9 +51,11 @@ class Policy(object):
         document['Statement'] = statements
         for resource in self.config['policy'].get('resources', []):
             arn = resource['arn']
-            _, _, service, _ = arn.split(':', 3)
+            _, _, service, postfix = arn.split(':', 3)
+            if postfix == "*:*:*":
+                arn = "*"
             statement = {"Effect": "Allow",
-                         "Resource": resource['arn']}
+                         "Resource": arn}
             actions = []
             for action in resource['actions']:
                 actions.append("{}:{}".format(service, action))
