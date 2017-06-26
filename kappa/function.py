@@ -490,7 +490,7 @@ class Function(object):
                 ready = True
             except ClientError as e:
                 if 'InvalidParameterValueException' in str(e):
-                    LOG.debug('Role is not ready, waiting')
+                    LOG.debug('Role is not ready, waiting: %s', str(e))
                     time.sleep(2)
                 else:
                     LOG.debug(str(e))
