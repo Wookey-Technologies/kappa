@@ -71,6 +71,7 @@ class Context(object):
                 self, self.config['environments'][self.environment])
         else:
             self.policy = None
+        self.existing_policies = self.config['environments'][self.environment].get('existing_policies', None)
         self.role = kappa.role.Role(
             self, self.config['environments'][self.environment])
         self.function = kappa.function.Function(

@@ -113,6 +113,14 @@ class Role(object):
                         RoleName=self.name,
                         PolicyArn=self._context.policy.arn)
                     LOG.debug(response)
+                if self._context.existing_policies:
+                    for policy in self._context.existing_policies:
+                        LOG.debug('attaching policy %s', policy)
+                        response = self._iam_client.call(
+                            'attach_role_policy',
+                            RoleName=self.name,
+                            PolicyArn=policy)
+                        LOG.debug(response)
             except ClientError:
                 LOG.exception('Error creating Role')
         else:
