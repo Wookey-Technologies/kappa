@@ -33,6 +33,21 @@ AssumeRolePolicyDocument = """{
     } ]
 }"""
 
+AssumeRolePolicyDocumentApiGateway = """{
+    "Version" : "2012-10-17",
+    "Statement": [ {
+        "Effect": "Allow",
+        "Principal": {
+            "Service": [
+                "lambda.amazonaws.com",
+                "apigateway.amazonaws.com"
+            ]
+        },
+        "Action": [ "sts:AssumeRole" ]
+    } ]
+}"""
+
+
 
 class Role(object):
 
@@ -81,6 +96,9 @@ class Role(object):
     def create(self):
         LOG.info('creating role %s', self.name)
         role = self.exists()
+        if self.config.get('linden', None):
+            if self.config['linden'].get('apigateway', None):
+                AssumeRolePolicyDocument=AssumeRolePolicyDocumentApiGateway
         if not role:
             try:
                 response = self._iam_client.call(
