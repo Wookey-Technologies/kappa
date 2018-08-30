@@ -96,15 +96,16 @@ class Role(object):
     def create(self):
         LOG.info('creating role %s', self.name)
         role = self.exists()
-        if self.config.get('linden', None):
-            if self.config['linden'].get('apigateway', None):
-                AssumeRolePolicyDocument=AssumeRolePolicyDocumentApiGateway
+        RealAssumeRolePolicyDocument=AssumeRolePolicyDocument
+        if self._config.get('linden', None):
+            if self._config['linden'].get('apigateway', None):
+                RealAssumeRolePolicyDocument=AssumeRolePolicyDocumentApiGateway
         if not role:
             try:
                 response = self._iam_client.call(
                     'create_role',
                     Path=self.Path, RoleName=self.name,
-                    AssumeRolePolicyDocument=AssumeRolePolicyDocument)
+                    AssumeRolePolicyDocument=RealAssumeRolePolicyDocument)
                 LOG.debug(response)
                 if self._context.policy:
                     LOG.debug('attaching policy %s', self._context.policy.arn)
@@ -114,12 +115,12 @@ class Role(object):
                         PolicyArn=self._context.policy.arn)
                     LOG.debug(response)
                 if self._context.existing_policies:
-                    for policy in self._context.existing_policies:
-                        LOG.debug('attaching policy %s', policy)
+                    for policy_arn in self._context.existing_policies:
+                        LOG.debug('attaching policy %s', policy_arn)
                         response = self._iam_client.call(
                             'attach_role_policy',
                             RoleName=self.name,
-                            PolicyArn=policy)
+                            PolicyArn=policy_arn)
                         LOG.debug(response)
             except ClientError:
                 LOG.exception('Error creating Role')
@@ -141,6 +142,12 @@ class Role(object):
                     'detach_role_policy',
                     RoleName=self.name, PolicyArn=policy_arn)
                 LOG.debug(response)
+            if self._context.existing_policies:
+                for policy_arn in self._context.existing_policies:
+                    response = self._iam_client.call(
+                        'detach_role_policy',
+                        RoleName=self.name, PolicyArn=policy_arn)
+                    LOG.debug(response)
             response = self._iam_client.call(
                 'delete_role', RoleName=self.name)
             LOG.debug(response)
