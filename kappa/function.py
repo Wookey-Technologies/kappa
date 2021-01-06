@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import sys
 import time
 import uuid
 import zipfile
@@ -43,6 +44,16 @@ class Function(object):
         self._response = None
         self._log = None
 
+        if self.image and self.runtime:
+            LOG.error('Cannot specify both runtime and container image')
+            sys.exit(1)
+        if not self.image and not self.runtime:
+            LOG.error('Must specify either runtime or container image')
+            sys.exit(1)
+        if self.image and self.handler:
+            LOG.error('Cannot specify handler for functions created with container images.')
+            sys.exit(1)
+
     @property
     def name(self):
         return self._context.name
@@ -59,11 +70,34 @@ class Function(object):
 
     @property
     def runtime(self):
-        return self._config['runtime']
+        return self._config.get('runtime', None)
+
+    @property
+    def image(self):
+        return self._config.get('image', None)
+
+    @property
+    def package_type(self):
+        if self.runtime:
+            return 'Zip'
+        elif self.image:
+            return 'Image'
+
+    @property
+    def code(self):
+        if self.image:
+            return {'ImageUri': self.image}
+
+        try:
+            with open(self.zipfile_name, 'rb') as fp:
+                zipdata = fp.read()
+                return {'ZipFile': zipdata}
+        except Exception:
+                LOG.exception('Unable to read zip file')
 
     @property
     def handler(self):
-        return self._config['handler']
+        return self._config.get('handler', None)
 
     @property
     def dependencies(self):
@@ -187,6 +221,9 @@ class Function(object):
         return value
 
     def _check_function_md5(self):
+        # Skip md5 check for images
+        if self.image:
+            return True
         # Zip up the source code and then compute the MD5 of that.
         # If the MD5 does not match the cached MD5, the function has
         # changed and needs to be updated so return True.
@@ -214,7 +251,8 @@ class Function(object):
         # changed and needs to be updated so return True.
         m = hashlib.md5()
         m.update(self.description.encode('utf-8'))
-        m.update(self.handler.encode('utf-8'))
+        if self.handler is not None:
+            m.update(self.handler.encode('utf-8'))
         m.update(str(self.memory_size).encode('utf-8'))
         m.update(self._context.exec_role_arn.encode('utf-8'))
         m.update(str(self.timeout).encode('utf-8'))
@@ -415,39 +453,39 @@ class Function(object):
         # Sometimes the role is not ready to be used by the function.
         ready = False
         while not ready:
-            with open(self.zipfile_name, 'rb') as fp:
-                exec_role = self._context.exec_role_arn
-                LOG.debug('exec_role=%s', exec_role)
-                try:
-                    zipdata = fp.read()
-                    response = self._lambda_client.call(
-                        'create_function',
-                        FunctionName=self.name,
-                        Code={'ZipFile': zipdata},
-                        Runtime=self.runtime,
-                        Role=exec_role,
-                        Handler=self.handler,
-                        Environment=self.environment_variables,
-                        Description=self.description,
-                        Timeout=self.timeout,
-                        MemorySize=self.memory_size,
-                        VpcConfig=self.vpc_config,
-                        Publish=True)
-                    LOG.debug(response)
-                    description = 'For stage {}'.format(
-                        self._context.environment)
-                    self.create_alias(self._context.environment, description)
+            exec_role = self._context.exec_role_arn
+            LOG.debug('exec_role=%s', exec_role)
+            try:
+                response = self._lambda_client.call(
+                    'create_function',
+                    FunctionName=self.name,
+                    PackageType=self.package_type,
+                    Code=self.code,
+                    Runtime=self.runtime,
+                    Role=exec_role,
+                    Handler=self.handler,
+                    Environment=self.environment_variables,
+                    Description=self.description,
+                    Timeout=self.timeout,
+                    MemorySize=self.memory_size,
+                    VpcConfig=self.vpc_config,
+                    Publish=True)
+                LOG.debug(response)
+                description = 'For stage {}'.format(
+                    self._context.environment)
+                self.create_alias(self._context.environment, description)
+                ready = True
+            except ClientError as e:
+                if 'InvalidParameterValueException' in str(e):
+                    LOG.debug(str(e))
+                    LOG.debug('Role is not ready, waiting')
+                    time.sleep(2)
+                else:
+                    LOG.debug(str(e))
                     ready = True
-                except ClientError as e:
-                    if 'InvalidParameterValueException' in str(e):
-                        LOG.debug('Role is not ready, waiting')
-                        time.sleep(2)
-                    else:
-                        LOG.debug(str(e))
-                        ready = True
-                except Exception:
-                    LOG.exception('Unable to upload zip file')
-                    ready = True
+            except Exception:
+                LOG.exception('Unable to create function')
+                ready = True
         self.add_permissions()
         self.add_log_retention_policy()
 
