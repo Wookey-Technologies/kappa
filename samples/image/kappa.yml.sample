@@ -1,0 +1,35 @@
+---
+name: kappa-simple-don2
+environments:
+  dev:
+    profile: sansar-dev
+    region: us-west-2
+    environment_variables:
+      key_one: "potatoes"
+      second_key: "Strawberries"
+    policy:
+      resources:
+        - arn: arn:aws:logs:*:*:*
+          actions:
+          - "*"
+  staging:
+    profile: staging
+    region: us-west-2
+    environment_variables:
+      key_one: "prod-key"
+      second_key: "another-prod-key"
+      is_prod: "true"
+    policy:
+      resources:
+        - arn: arn:aws:logs:*:*:*
+          actions:
+          - "*"
+lambda:    
+  description: A very simple Kappa example
+  #handler: simple.handler
+  #runtime: python2.7
+  #image: registry.docker.dev.sansar.io/lambda/kappa-simple:latest
+  image: 225996186552.dkr.ecr.us-west-2.amazonaws.com/lambda/test-repo:latest
+  memory_size: 128
+  timeout: 3
+  

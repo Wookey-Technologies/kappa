@@ -25,14 +25,16 @@ You have to:
 
 Kappa tries to help you with some of this.  It creates all IAM policies for you
 based on the resources you have told it you need to access.  It creates the IAM
-execution role for you and associates the policy with it.  Kappa will zip up
-the function and any dependencies and upload them to AWS Lambda.  It also sends
-test data to the uploaded function and finds the related CloudWatch log stream
-and displays the log events.  Finally, it will add the event source to turn
-your function on.
+execution role for you and associates the policy with it.  Kappa has two options
+for deploying: zip up the function and any dependencies and upload them to AWS 
+Lambda or refer to the Lambda ImageURI in AWS ECR for a specific function. It also provides the ability to test data by invoking the function in either AWS 
+Lambda or in the provided Lambda Container, finding the related CloudWatch log 
+stream, and displaying the log events.  Finally, it will add the event source to
+trigger your function.
 
-If you need to make changes, kappa will allow you to easily update your Lambda
-function with new code or update your event sources as needed.
+Kappa is equipped to make changes to function using the zip method by re-
+deploying the changed function. Changes to Lambda ImageURI's are not handled 
+by Kappa. Both methods can easily update event sources as needed.
 
 Installation
 ============
@@ -46,8 +48,8 @@ Or for the development version::
     pip install git+https://github.com/garnaat/kappa.git
 
 
-Quick Start
-===========
+Quick Start Using Zip
+=====================
 
 To get a feel for how kappa works, let's take a look at a very simple example
 contained in the ``samples/simple`` directory of the kappa distribution.  This
@@ -138,9 +140,12 @@ log group that will be created for it automatically by AWS Lambda.
 
 The ``lambda`` section contains the configuration information about our Lambda
 function.  These values are passed to Lambda when we create the function and
-can be updated at any time after. ``log_retention_policy`` is an optional
-parameter. When supplied, it defines the number of days our Lambda function
-Cloudwatch logs kept for. By default, these logs are never removed.
+can be updated at any time after using this method. Note that when using the 
+Image method the _src directory is ignored and listing a handler or function 
+in the kappa.yml file will result in an error - an example configuration for 
+the Image method is located ``samples/image``. The ``log_retention_policy`` is 
+an optional parameter. When supplied, it defines the number of days our Lambda 
+function Cloudwatch logs kept for. By default, these logs are never removed.
 
 To modify this for your own use, you just need to put in the right values for
 ``profile`` and ``region`` in one of the environment sections.  You can also
@@ -201,9 +206,9 @@ function that prints out the ``event`` (the data) passed to the function.  And
 finally, we can see the Response from the function which, for now, is just a
 hard-coded data structure returned by the function.
 
-Need to make a change in your function, your list of resources, or your
-function configuration?  Just go ahead and make the change and then re-run the
-``deploy`` command:
+In the Zip method, making a change in your function, your list of resources, or 
+your function configuration is made easy.  Just go ahead and make the change and 
+then re-run the ``deploy`` command:
 
 .. code-block:: bash
 
