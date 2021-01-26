@@ -493,19 +493,18 @@ class Function(object):
         LOG.info('updating function %s', self.name)
         if self._check_function_md5():
             self._response = None
-            with open(self.zipfile_name, 'rb') as fp:
-                try:
-                    LOG.info('uploading new function zipfile %s',
-                             self.zipfile_name)
-                    zipdata = fp.read()
-                    response = self._lambda_client.call(
-                        'update_function_code',
-                        FunctionName=self.name,
-                        ZipFile=zipdata,
-                        Publish=True)
-                    LOG.debug(response)
-                except Exception:
-                    LOG.exception('unable to update zip file')
+            try:
+                LOG.info('uploading new function %s',
+                         self.name)
+                response = self._lambda_client.call(
+                    'update_function_code',
+                    FunctionName=self.name,
+                    Publish=True,
+                    **self.code)
+                LOG.debug(response)
+            except Exception:
+                LOG.exception('Unable to update function')
+
         self.update_alias(
             self._context.environment,
             'For the {} stage'.format(self._context.environment))
