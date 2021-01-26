@@ -2,3 +2,4 @@ PyYAML>=3.11
 boto3>=1.16.49
 click>=5.1
 placebo>=0.8.1
+docker
