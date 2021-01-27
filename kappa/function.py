@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import sys
 import time
 import uuid
 import zipfile
@@ -205,6 +206,16 @@ class Function(object):
         else:
             self._code = ZipCode(context, self.dependencies)
 
+        if self.image and self.runtime:
+            LOG.error('Cannot specify both runtime and container image')
+            sys.exit(1)
+        if not self.image and not self.runtime:
+            LOG.error('Must specify either runtime or container image')
+            sys.exit(1)
+        if self.image and self.handler:
+            LOG.error('Cannot specify handler for functions created with container images.')
+            sys.exit(1)
+
     @property
     def name(self):
         return self._context.name
@@ -221,11 +232,34 @@ class Function(object):
 
     @property
     def runtime(self):
-        return self._config['runtime']
+        return self._config.get('runtime', None)
+
+    @property
+    def image(self):
+        return self._config.get('image', None)
+
+    @property
+    def package_type(self):
+        if self.runtime:
+            return 'Zip'
+        elif self.image:
+            return 'Image'
+
+    @property
+    def code(self):
+        if self.image:
+            return {'ImageUri': self.image}
+
+        try:
+            with open(self.zipfile_name, 'rb') as fp:
+                zipdata = fp.read()
+                return {'ZipFile': zipdata}
+        except Exception:
+                LOG.exception('Unable to read zip file')
 
     @property
     def handler(self):
-        return self._config['handler']
+        return self._config.get('handler', None)
 
     @property
     def dependencies(self):
@@ -335,9 +369,12 @@ class Function(object):
         # Compute the MD5 of all of the components of the configuration.
         # If the MD5 does not match the cached MD5, the configuration has
         # changed and needs to be updated so return True.
+        if self.image: 
+            return True
         m = hashlib.md5()
         m.update(self.description.encode('utf-8'))
-        m.update(self.handler.encode('utf-8'))
+        if self.handler is not None:
+            m.update(self.handler.encode('utf-8'))
         m.update(str(self.memory_size).encode('utf-8'))
         m.update(self._context.exec_role_arn.encode('utf-8'))
         m.update(str(self.timeout).encode('utf-8'))
@@ -475,6 +512,8 @@ class Function(object):
                 response = self._code.lambda_call(self._lambda_client,
                     'create_function',
                     FunctionName=self.name,
+                    PackageType=self.package_type,
+                    Code=self.code,
                     Runtime=self.runtime,
                     Role=exec_role,
                     Handler=self.handler,
@@ -507,13 +546,17 @@ class Function(object):
         if self._code.modified():
             self._response = None
             try:
-                response = self._code.lambda_call(self._lambda_client,
-                     'update_function_code',
-                     FunctionName=self.name,
-                     Publish=True)
+                LOG.info('uploading new function %s',
+                         self.name)
+                response = self._lambda_client.call(
+                    'update_function_code',
+                    FunctionName=self.name,
+                    Publish=True,
+                    **self.code)
                 LOG.debug(response)
             except Exception:
-                LOG.exception('unable to update function')
+                LOG.exception('Unable to update function')
+
         self.update_alias(
             self._context.environment,
             'For the {} stage'.format(self._context.environment))
@@ -529,6 +572,7 @@ class Function(object):
                 response = self._lambda_client.call(
                     'update_function_configuration',
                     FunctionName=self.name,
+                    Runtime=self.runtime,
                     VpcConfig=self.vpc_config,
                     Role=exec_role,
                     Handler=self.handler,
