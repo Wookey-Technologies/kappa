@@ -15,6 +15,7 @@
 
 from datetime import datetime
 import base64
+import logging, sys
 
 import click
 
@@ -22,6 +23,12 @@ from kappa.context import Context
 
 pass_ctx = click.make_pass_decorator(Context)
 
+class ExceptionHandler(logging.Handler):
+    def emit(self, record):
+        if record.levelno >= logging.ERROR:
+            sys.exit(1)
+
+logging.getLogger().addHandler(ExceptionHandler())
 
 @click.group()
 @click.option(
