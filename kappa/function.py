@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import sys
 import time
 import uuid
 import zipfile
@@ -49,12 +50,34 @@ class S3Code(object):
 
         if op_name == 'create_function':
             kwargs['Code'] = code_params
+            kwargs['PackageType'] = 'Zip'
         else:
             kwargs.update(code_params)
 
         LOG.info('using S3 code bucket: %s key: %s version: %s' % \
                  (code_params['S3Bucket'], code_params['S3Key'],
                   code_params.get('S3ObjectVersion')))
+        return lambda_client.call(op_name, **kwargs)
+
+class ImageCode(object):
+
+    def __init__(self, image):
+        self._image = image
+
+    def prepare(self):
+        pass
+
+    def modified(self):
+        return True
+
+    def lambda_call(self, lambda_client, op_name, **kwargs):
+        if op_name == 'create_function':
+            kwargs['Code'] = {'ImageUri': self._image}
+            kwargs['PackageType'] = 'Image'
+        else:
+            kwargs['ImageUri'] = self._image
+
+        LOG.info('using image: %s' % self._image)
         return lambda_client.call(op_name, **kwargs)
 
 class ZipCode(object):
@@ -79,6 +102,7 @@ class ZipCode(object):
             LOG.info('uploading new function zipfile %s', self.zipfile_name)
             if op_name == 'create_function':
                 kwargs['Code'] = {'ZipFile': fp.read()}
+                kwargs['PackageType'] = 'Zip'
             else:
                 kwargs['ZipFile'] = fp.read()
             return lambda_client.call(op_name, **kwargs)
@@ -106,8 +130,8 @@ class ZipCode(object):
         # changed and needs to be updated so return True.
         changed = True
         self._copy_config_file()
-        files = [] + self._dependencies + [self._context.source_dir]
-        self._zip_lambda_function(self.zipfile_name, files)
+        files = [] + self.dependencies + [self._context.source_dir]
+        self.zip_lambda_function(self.zipfile_name, files)
         m = hashlib.md5()
         with open(self.zipfile_name, 'rb') as fp:
             m.update(fp.read())
@@ -121,6 +145,7 @@ class ZipCode(object):
             changed = False
             LOG.info('function unchanged')
         return changed
+
 
     def _copy_config_file(self):
         config_name = '{}_config.json'.format(self._context.environment)
@@ -200,8 +225,21 @@ class Function(object):
             'lambda', context.session)
         self._response = None
         self._log = None
+
+        if self.image and self.runtime:
+            LOG.error('Cannot specify both runtime and container image')
+            sys.exit(1)
+        if not self.image and not self.runtime:
+            LOG.error('Must specify either runtime or container image')
+            sys.exit(1)
+        if self.image and self.handler:
+            LOG.error('Cannot specify handler for functions created with container images.')
+            sys.exit(1)
+
         if 'code' in config:
             self._code = S3Code(config['code'])
+        elif 'image' in config:
+            self._code = ImageCode(config['image'])
         else:
             self._code = ZipCode(context, self.dependencies)
 
@@ -221,11 +259,34 @@ class Function(object):
 
     @property
     def runtime(self):
-        return self._config['runtime']
+        return self._config.get('runtime', None)
+
+    @property
+    def image(self):
+        return self._config.get('image', None)
+
+    @property
+    def package_type(self):
+        if self.runtime:
+            return 'Zip'
+        elif self.image:
+            return 'Image'
+
+    #@property
+    #def code(self):
+    #    if self.image:
+    #        return {'ImageUri': self.image}
+
+    #    try:
+    #        with open(self.zipfile_name, 'rb') as fp:
+    #            zipdata = fp.read()
+    #            return {'ZipFile': zipdata}
+    #    except Exception:
+    #            LOG.exception('Unable to read zip file')
 
     @property
     def handler(self):
-        return self._config['handler']
+        return self._config.get('handler', None)
 
     @property
     def dependencies(self):
@@ -337,7 +398,8 @@ class Function(object):
         # changed and needs to be updated so return True.
         m = hashlib.md5()
         m.update(self.description.encode('utf-8'))
-        m.update(self.handler.encode('utf-8'))
+        if self.handler is not None:
+            m.update(self.handler.encode('utf-8'))
         m.update(str(self.memory_size).encode('utf-8'))
         m.update(self._context.exec_role_arn.encode('utf-8'))
         m.update(str(self.timeout).encode('utf-8'))
@@ -495,8 +557,8 @@ class Function(object):
                 else:
                     LOG.debug(str(e))
                     ready = True
-            except Exception:
-                LOG.exception('Unable to create function')
+            except Exception as e:
+                LOG.exception('Unable to create function: %s' % str(e))
                 ready = True
         self.add_permissions()
         self.add_log_retention_policy()
@@ -512,8 +574,8 @@ class Function(object):
                      FunctionName=self.name,
                      Publish=True)
                 LOG.debug(response)
-            except Exception:
-                LOG.exception('unable to update function')
+            except Exception as e:
+                LOG.exception('Unable to update function: %s' % str(e))
         self.update_alias(
             self._context.environment,
             'For the {} stage'.format(self._context.environment))
