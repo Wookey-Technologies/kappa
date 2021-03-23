@@ -266,25 +266,6 @@ class Function(object):
         return self._config.get('image', None)
 
     @property
-    def package_type(self):
-        if self.runtime:
-            return 'Zip'
-        elif self.image:
-            return 'Image'
-
-    #@property
-    #def code(self):
-    #    if self.image:
-    #        return {'ImageUri': self.image}
-
-    #    try:
-    #        with open(self.zipfile_name, 'rb') as fp:
-    #            zipdata = fp.read()
-    #            return {'ZipFile': zipdata}
-    #    except Exception:
-    #            LOG.exception('Unable to read zip file')
-
-    @property
     def handler(self):
         return self._config.get('handler', None)
 
