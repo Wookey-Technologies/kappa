@@ -67,6 +67,7 @@ class ZipCode(object):
         self._context = context
         self._dependencies = dependencies
         self._modified = False
+        self._config = context.config
 
     def prepare(self):
         self._modified = self._check_function_md5()
