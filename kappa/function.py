@@ -90,6 +90,7 @@ class ZipCode(object):
         self._context = context
         self._dependencies = dependencies
         self._modified = False
+        self._config = context.config 
 
     def prepare(self):
         self._modified = self._check_function_md5()
@@ -130,8 +131,8 @@ class ZipCode(object):
         # changed and needs to be updated so return True.
         changed = True
         self._copy_config_file()
-        files = [] + self.dependencies + [self._context.source_dir]
-        self.zip_lambda_function(self.zipfile_name, files)
+        files = [] + self._dependencies + [self._context.source_dir]
+        self._zip_lambda_function(self.zipfile_name, files)
         m = hashlib.md5()
         with open(self.zipfile_name, 'rb') as fp:
             m.update(fp.read())
