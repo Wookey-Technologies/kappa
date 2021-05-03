@@ -61,8 +61,8 @@ class CloudWatchEventSource(kappa.event_source.base.EventSource):
                 response = self._lambda.call('get_policy',
                                          FunctionName=function.name)
                 existingPermission = self._config['arn'] in str(response['Policy'])
-            except Exception:
-                LOG.debug('CloudWatch event source permission not available')
+            except Exception as e:
+                LOG.debug('%s: CloudWatch event source permission not available' % e)
 
             if not existingPermission:
                 response = self._lambda.call('add_permission',
@@ -81,8 +81,8 @@ class CloudWatchEventSource(kappa.event_source.base.EventSource):
                                              'Arn': function.arn
                                          }])
             LOG.debug(response)
-        except Exception:
-            LOG.exception('Unable to put CloudWatch event source')
+        except Exception as e:
+            LOG.exception('%s: Unable to put CloudWatch event source' % e)
 
     def update(self, function):
         self.add(function)
